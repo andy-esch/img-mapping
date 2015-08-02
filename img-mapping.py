@@ -1,16 +1,30 @@
 #
-# Code by Chan Kim (96chany.com@gmail.com) 
-# 2013-02-04
+# img-mapping
+# Andy Eschbacher
+# Aug, 2015
 #
-# reference source
-# 1) How to extract GPS information
-#        https://gist.github.com/erans/983821
+# This program does this:
+#   * extracts lat lon from exif data of images
+#   * pushes image to an aws s3 bucket
+#   * generates a csv file with geo data and url of images
+#   * pushes csv to cartodb
 #
-# 2) How to use PIL library
-#      http://www.blog.pythonlibrary.org/2010/03/28/getting-photo-metadata-exif-using-python/
+# To get started:
+#   * install aws command line tools: https://aws.amazon.com/cli/
+#   * install modules listed below
+#   * install development version of cartodb's python module: 
+#       pip install -e git+git://github.com/CartoDB/cartodb-python.git#egg=cartodb
+#
+# EXIF code adapted from https://github.com/96chan/extract_EXIF
+# 
+#
 #
 
+# generic
 import glob
+import sys
+
+# image processing
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 
@@ -19,6 +33,15 @@ import boto
 import boto.s3
 from boto.s3.key import Key
 
+# cartodb
+from cartodb import CartoDBAPIKey, CartoDBException, FileImport
+import json
+
+def loadConfig():
+    with open('./config.json') as data_file:
+        data = json.load(data_file)
+        return data
+
 def get_exif_data(fn):
     """Returns a dictionary from the exif data of an PIL Image item. Also converts the GPS Tags"""
     exif_data = {}
@@ -26,15 +49,15 @@ def get_exif_data(fn):
     info = i._getexif()
     if info:
         for tag, value in info.items():
-        	decoded = TAGS.get(tag, tag)
-        	if decoded == "GPSInfo":
-        		gps_data = {}
-        		for t in value:
-        			sub_decoded = GPSTAGS.get(t, t)
-        			gps_data[sub_decoded] = value[t]
-        			exif_data[decoded] = gps_data
-        	else:
-        		exif_data[decoded] = value
+            decoded = TAGS.get(tag, tag)
+            if decoded == "GPSInfo":
+                gps_data = {}
+                for t in value:
+                    sub_decoded = GPSTAGS.get(t, t)
+                    gps_data[sub_decoded] = value[t]
+                    exif_data[decoded] = gps_data
+            else:
+                exif_data[decoded] = value
     return exif_data
  
 def _get_if_exist(data, key):
@@ -83,65 +106,94 @@ def get_lat_lon(exif_data):
     return lat, lon
 
 def put_files(f):
-	k = bucket.new_key(f[-9:])
-	print 'Uploading %s to Amazon S3 bucket %s' % \
-	     (f, bucket_name)
-	k.set_contents_from_filename(f)
-	k.set_metadata('Content-Type', 'image/jpeg')
-	k.set_acl('public-read')
-	url = k.generate_url(expires_in=0, query_auth=False,force_http=True)
-	return url
+    k = bucket.new_key(f[-9:])
+    print "--> pushing '%s' to s3 bucket '%s'" % \
+         (f, bucket_name)
+    k.set_contents_from_filename(f)
+    k.set_metadata('Content-Type', 'image/jpeg')
+    k.set_acl('public-read')
+    url = k.generate_url(expires_in=0, query_auth=False,force_http=True)
+    return url
 
-def write_csv(file_name, headings, data):
-	import csv
-	with open('out.csv', 'wb') as csvfile:
-	    csvout = csv.writer(csvfile)
-	    csvout.writerow(headings)
-	    for row in data:
-	    	csvout.writerow(row)
+def write_csv(file_name, header, data):
+    import csv
+    with open(file_name, 'wb') as csvfile:
+        csvout = csv.writer(csvfile)
+        csvout.writerow(header)
+        for row in data:
+            csvout.writerow(row)
 
-	return True
+    return True
 
+def push_to_cartodb(f):
+    """
+        send dataset f to cartodb, return success of import
+    """
+    print "attempting to import into cartodb"
+    config = loadConfig()
+    cl = CartoDBAPIKey(config["API_KEY"],config["user"])
+    fi = FileImport(f,cl,table_name='python_table_test')
+    fi.run()
+
+    return fi.success
 
 if __name__ == "__main__":
 
-	# setup aws s3 bucket
-    bucket_name = 'cdb-summer-project'
+    project_name = ""
+
+    if len(sys.argv) > 1:
+        project_name = sys.argv[1]
+    else:
+        project_name = 'summer_project'
+
+    # setup aws s3 bucket
+    bucket_name = project_name
     conn = boto.connect_s3()
     bucket = conn.create_bucket(bucket_name,location=boto.s3.connection.Location.DEFAULT,policy='public-read')
+    print "--> S3 bucket created with name '%s'" % bucket_name
     
-    # for exif data from images
+    # for image metadata
     data = []
 
-    # get list of images
-    images  = glob.glob('./img/*.jpg')
+    # get paths of all images
+    images  = glob.glob('img/*.jpg')
     
-    # for each image, extract exif, put in data
+    # for each image, extract exif, get url in s3 bucket, build data table
     for i in images: 
+        # grab exif data
         exif_data = get_exif_data(i)
         date = exif_data['DateTimeOriginal'].split()[0].replace(':','-')
         time = exif_data['DateTimeOriginal'].split()[1]
         [lat, lon] = get_lat_lon(exif_data)
 
-        # send to s3 bucket, get back url
-        # url = put_files(i)
-        url = ''
+        # send image to s3 bucket, get back url
+        url = put_files(i)
+        # url = ''
 
         # compile data
         if lat != None and lon != None:
             data +=[[i, url, date, time, lat, lon]]
         else:
-        	data +=[[i, url, date, time, None, None]]
+            data +=[[i, url, date, time, None, None]]
 
     # csv header
-    hdngs = ['filename', 'url', 'date_taken', 'time_taken', 'lat', 'lon']
+    header = ['filename', 'url', 'date_taken', 'time_taken', 'lat', 'lon']
     
-    output_file_name = 'out.csv'
+    output_file_name = ("%s.csv" % project_name)
 
     # write data on csv file
-    out_result = write_csv(output_file_name,hdngs,data)
+    out_result = write_csv(output_file_name,header,data)
 
     if out_result:
-    	print "data saved in %s" % output_file_name
+        print "--> data saved in %s" % output_file_name
     else:
-    	print "error saving data in %s" % output_file_name
+        print "--> error saving data in %s" % output_file_name
+
+    # send data to cartodb
+    import_status = push_to_cartodb(output_file_name)
+    # import_status = True
+
+    if import_status:
+        print "--> '%s' successfully imported into cartodb" % output_file_name
+    else:
+        print "--> import of '%s' into cartodb failed" % output_file_name
