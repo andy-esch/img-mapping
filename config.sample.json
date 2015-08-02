@@ -1,0 +1,5 @@
+{
+	"comment": "cartodb config file",
+	"API_KEY": "your api key",
+	"user": "your cartodb username"
+}
