@@ -106,7 +106,7 @@ def get_lat_lon(exif_data):
     return lat, lon
 
 def put_files(f):
-    k = bucket.new_key(f[-9:])
+    k = bucket.new_key(f)
     print "--> pushing '%s' to s3 bucket '%s'" % \
          (f, bucket_name)
     k.set_contents_from_filename(f)
@@ -136,6 +136,18 @@ def push_to_cartodb(f):
     fi.run()
 
     return fi.success
+
+def create_map(t,u):
+    replacements = {'summer_project_table_name':t, 'summer_project_user_name': u}
+
+    with open('template.html') as infile, open(("%s.html" % t), 'w') as outfile:
+        for line in infile:
+            for src, target in replacements.iteritems():
+                line = line.replace(src, target)
+
+            outfile.write(line)
+
+    return True
 
 if __name__ == "__main__":
 
@@ -195,5 +207,8 @@ if __name__ == "__main__":
 
     if import_status:
         print "--> '%s' successfully imported into cartodb" % output_file_name
+        create_map(project_name,loadConfig()["user"])
+        url = put_files("%s.html" % project_name)
+        print "your image map is love here: ", url
     else:
         print "--> import of '%s' into cartodb failed" % output_file_name
