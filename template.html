@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Summer Images</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
+    <link rel="shortcut icon" href="http://cartodb.com/assets/favicon.ico" />
+    
+    <!-- Map takes up full browser window -->
+    <style>
+      html, body, #map {
+        height: 100%;
+        padding: 0;
+        margin: 0;
+      }
+    </style>
+    <script id='infowindow_template' type="infowindow/html">
+        <div class="cartodb-popup v2">
+          <a href="#close" class="cartodb-popup-close-button close">x</a>
+          <div class="cartodb-popup-content-wrapper">
+            <div class="cartodb-popup-content">
+                <img src="{{url}}" style="width: 400px;" />
+            </div>
+          </div>
+          <div class="cartodb-popup-tip-container"></div>
+        </div>
+    </script>
+    <script id="tooltip_template" type="tooltip/html">
+        <div style="width: 200px; height: 200px; background: #f60; border: 1px solid white;">
+            <h4>hello there</h4>
+            <img src="{{url}}" />
+        </div>
+    </script>
+
+    <link rel="stylesheet" href="http://libs.cartocdn.com/cartodb.js/v3/3.15/themes/css/cartodb.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <!-- include cartodb.js library -->
+    <script src="http://libs.cartocdn.com/cartodb.js/v3/3.15/cartodb.js"></script>
+
+    
+    <!-- Drop your code between the script tags below! -->
+    <script>
+    var map = new L.Map('map', {
+        center: [30, 0],
+        zoom: 2
+    });
+
+    var user_name = 'summer_project_user_name';
+    var table_name = 'summer_project_table_name';
+
+    var tileLayer = L.tileLayer('http://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="http://cartodb.com/attributions">CartoDB</a>'
+        }).addTo(map);
+
+    var s = new cartodb.SQL({user: user_name});
+    s.getBounds('SELECT * FROM ' + table_name).done(function(bounds) {
+        map.fitBounds(bounds);
+        console.log(bounds);
+    });
+
+    var layerConfig = {
+          user_name: user_name,
+          type: 'cartodb',
+          sublayers: [
+            {
+               sql: 'select * from ' + table_name,
+               cartocss: '#layer{ marker-fill-opacity: 0.9; marker-line-color: #FFF; marker-line-width: 1; marker-line-opacity: 1; marker-placement: point; marker-type: ellipse; marker-width: 10; marker-fill: #FF6600; marker-allow-overlap: true;}',
+               interactivity: 'cartodb_id,url'
+            },
+            {
+                type: "http",
+                urlTemplate: "http://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png",
+                subdomains: "abcd"
+            }]
+        }
+
+
+    cartodb.createLayer(map, layerConfig)
+        .addTo(map)
+        .done(function(layer) {
+            console.log("nice work, layer created");
+            var active = layer.getSubLayer(0);
+            cdb.vis.Vis.addInfowindow(
+              map, 
+              active, 
+              ['cartodb_id','url'], 
+              {
+                 infowindowTemplate: $('#infowindow_template').html(),
+                 templateType: 'mustache',
+                 triggerEvent: 'featureClick',
+                 cursorInteraction: true,
+                 width: 450
+               }
+            );
+    })
+    .error(function(err) {
+        console.log("error error");
+    });
+    </script>
+
+  </body>
+</html>
