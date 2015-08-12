@@ -180,7 +180,6 @@ if __name__ == "__main__":
 
         # send image to s3 bucket, get back url
         url = put_files(i)
-        # url = ''
 
         # compile data
         if lat != None and lon != None:
@@ -203,12 +202,11 @@ if __name__ == "__main__":
 
     # send data to cartodb
     import_status = push_to_cartodb(output_file_name)
-    # import_status = True
 
     if import_status:
         print "--> '%s' successfully imported into cartodb" % output_file_name
-        create_map(project_name,loadConfig()["user"])
-        url = put_files("%s.html" % project_name)
-        print "your image map is love here: ", url
+        # create_map(project_name,loadConfig()["user"])
+        # url = put_files("%s.html" % project_name)
+        # print "your image map is located here: ", url
     else:
         print "--> import of '%s' into cartodb failed" % output_file_name
