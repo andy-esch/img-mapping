@@ -20,6 +20,6 @@ To get started:
 
 ```pip install -e git+git://github.com/CartoDB/cartodb-python.git#egg=cartodb```
 
-* rename `config.sample.json` to `config.sample.json` and fill in your CartoDB username and API key. Be sure not to push this file to GitHub!
+* rename `config.sample.json` to `config.json` and fill in your CartoDB username and API key. **Be sure not to push this file to GitHub!**
 
 Very helpful code on EXIF data extraction adapted from [https://github.com/96chan/extract_EXIF](https://github.com/96chan/extract_EXIF).
